@@ -1,7 +1,5 @@
-/* $OpenBSD$ */
-
 /*
- * Copyright (c) 2012 Nicholas Marriott <nicm@users.sourceforge.net>
+ * Copyright (c) 2016 Nicholas Marriott <nicholas.marriott@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,38 +16,28 @@
 
 #include <sys/types.h>
 
-#include <string.h>
-
 #include "tmux.h"
 
-/* Get cell width. */
-u_int
-grid_cell_width(const struct grid_cell *gc)
+#if defined(HAVE_PROGRAM_INVOCATION_SHORT_NAME)
+const char *
+getprogname(void)
 {
-	return (gc->xstate >> 4);
-}
+	extern char	*program_invocation_short_name;
 
-/* Get cell data. */
-void
-grid_cell_get(const struct grid_cell *gc, struct utf8_data *ud)
-{
-	ud->size = gc->xstate & 0xf;
-	ud->width = gc->xstate >> 4;
-	memcpy(ud->data, gc->xdata, ud->size);
+	return (program_invocation_short_name);
 }
+#elif defined(HAVE___PROGNAME)
+const char *
+getprogname(void)
+{
+	extern char	*__progname;
 
-/* Set cell data. */
-void
-grid_cell_set(struct grid_cell *gc, const struct utf8_data *ud)
-{
-	memcpy(gc->xdata, ud->data, ud->size);
-	gc->xstate = (ud->width << 4) | ud->size;
+	return (__progname);
 }
-
-/* Set a single character as cell data. */
-void
-grid_cell_one(struct grid_cell *gc, u_char ch)
+#else
+const char *
+getprogname(void)
 {
-	*gc->xdata = ch;
-	gc->xstate = (1 << 4) | 1;
+	return ("tmux");
 }
+#endif

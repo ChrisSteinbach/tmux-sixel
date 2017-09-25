@@ -1,7 +1,7 @@
 /* $OpenBSD$ */
 
 /*
- * Copyright (c) 2007 Nicholas Marriott <nicm@users.sourceforge.net>
+ * Copyright (c) 2007 Nicholas Marriott <nicholas.marriott@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,6 +18,7 @@
 
 #include <sys/types.h>
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "tmux.h"
@@ -26,36 +27,41 @@
  * List key bindings.
  */
 
-enum cmd_retval	 cmd_list_keys_exec(struct cmd *, struct cmd_q *);
+static enum cmd_retval	 cmd_list_keys_exec(struct cmd *, struct cmd_q *);
 
-enum cmd_retval	 cmd_list_keys_table(struct cmd *, struct cmd_q *);
-enum cmd_retval	 cmd_list_keys_commands(struct cmd *, struct cmd_q *);
+static enum cmd_retval	 cmd_list_keys_table(struct cmd *, struct cmd_q *);
+static enum cmd_retval	 cmd_list_keys_commands(struct cmd *, struct cmd_q *);
 
 const struct cmd_entry cmd_list_keys_entry = {
-	"list-keys", "lsk",
-	"t:T:", 0, 0,
-	"[-t mode-table] [-T key-table]",
-	0,
-	cmd_list_keys_exec
+	.name = "list-keys",
+	.alias = "lsk",
+
+	.args = { "t:T:", 0, 0 },
+	.usage = "[-t mode-table] [-T key-table]",
+
+	.flags = CMD_STARTSERVER,
+	.exec = cmd_list_keys_exec
 };
 
 const struct cmd_entry cmd_list_commands_entry = {
-	"list-commands", "lscm",
-	"", 0, 0,
-	"",
-	0,
-	cmd_list_keys_exec
+	.name = "list-commands",
+	.alias = "lscm",
+
+	.args = { "F:", 0, 0 },
+	.usage = "[-F format]",
+
+	.flags = CMD_STARTSERVER,
+	.exec = cmd_list_keys_exec
 };
 
-enum cmd_retval
+static enum cmd_retval
 cmd_list_keys_exec(struct cmd *self, struct cmd_q *cmdq)
 {
 	struct args		*args = self->args;
 	struct key_table	*table;
 	struct key_binding	*bd;
 	const char		*key, *tablename, *r;
-	char			 tmp[BUFSIZ];
-	size_t			 used;
+	char			*cp, tmp[BUFSIZ];
 	int			 repeat, width, tablewidth, keywidth;
 
 	if (self->entry == &cmd_list_commands_entry)
@@ -77,16 +83,14 @@ cmd_list_keys_exec(struct cmd *self, struct cmd_q *cmdq)
 			continue;
 		RB_FOREACH(bd, key_bindings, &table->key_bindings) {
 			key = key_string_lookup_key(bd->key);
-			if (key == NULL)
-				continue;
 
 			if (bd->can_repeat)
 				repeat = 1;
 
-			width = strlen(table->name);
+			width = utf8_cstrwidth(table->name);
 			if (width > tablewidth)
-				tablewidth =width;
-			width = strlen(key);
+				tablewidth = width;
+			width = utf8_cstrwidth(key);
 			if (width > keywidth)
 				keywidth = width;
 		}
@@ -97,8 +101,6 @@ cmd_list_keys_exec(struct cmd *self, struct cmd_q *cmdq)
 			continue;
 		RB_FOREACH(bd, key_bindings, &table->key_bindings) {
 			key = key_string_lookup_key(bd->key);
-			if (key == NULL)
-				continue;
 
 			if (!repeat)
 				r = "";
@@ -106,12 +108,21 @@ cmd_list_keys_exec(struct cmd *self, struct cmd_q *cmdq)
 				r = "-r ";
 			else
 				r = "   ";
-			used = xsnprintf(tmp, sizeof tmp, "%s-T %-*s %-*s ", r,
-			    (int)tablewidth, table->name, (int)keywidth, key);
-			if (used < sizeof tmp) {
-				cmd_list_print(bd->cmdlist, tmp + used,
-				    (sizeof tmp) - used);
-			}
+			xsnprintf(tmp, sizeof tmp, "%s-T ", r);
+
+			cp = utf8_padcstr(table->name, tablewidth);
+			strlcat(tmp, cp, sizeof tmp);
+			strlcat(tmp, " ", sizeof tmp);
+			free(cp);
+
+			cp = utf8_padcstr(key, keywidth);
+			strlcat(tmp, cp, sizeof tmp);
+			strlcat(tmp, " ", sizeof tmp);
+			free(cp);
+
+			cp = cmd_list_print(bd->cmdlist);
+			strlcat(tmp, cp, sizeof tmp);
+			free(cp);
 
 			cmdq_print(cmdq, "bind-key %s", tmp);
 		}
@@ -120,15 +131,15 @@ cmd_list_keys_exec(struct cmd *self, struct cmd_q *cmdq)
 	return (CMD_RETURN_NORMAL);
 }
 
-enum cmd_retval
+static enum cmd_retval
 cmd_list_keys_table(struct cmd *self, struct cmd_q *cmdq)
 {
 	struct args			*args = self->args;
-	const char			*tablename;
+	const char			*tablename, *key, *cmdstr, *mode;
 	const struct mode_key_table	*mtab;
 	struct mode_key_binding		*mbind;
-	const char			*key, *cmdstr, *mode;
-	int			 	 width, keywidth, any_mode;
+	char				 repeat[16];
+	int			 	 width, keywidth, repeatwidth, any_mode;
 
 	tablename = args_get(args, 't');
 	if ((mtab = mode_key_findtable(tablename)) == NULL) {
@@ -136,34 +147,43 @@ cmd_list_keys_table(struct cmd *self, struct cmd_q *cmdq)
 		return (CMD_RETURN_ERROR);
 	}
 
-	width = 0;
+	keywidth = repeatwidth = 0;
 	any_mode = 0;
 	RB_FOREACH(mbind, mode_key_tree, mtab->tree) {
 		key = key_string_lookup_key(mbind->key);
-		if (key == NULL)
-			continue;
 
 		if (mbind->mode != 0)
 			any_mode = 1;
 
-		keywidth = strlen(key);
-		if (keywidth > width)
-			width = keywidth;
+		width = strlen(key);
+		if (width > keywidth)
+			keywidth = width;
+
+		if (mbind->repeat != 1) {
+			snprintf(repeat, sizeof repeat, "%u", mbind->repeat);
+			width = strlen(repeat);
+			if (width > repeatwidth)
+				repeatwidth = width;
+		}
 	}
 
 	RB_FOREACH(mbind, mode_key_tree, mtab->tree) {
 		key = key_string_lookup_key(mbind->key);
-		if (key == NULL)
-			continue;
 
 		mode = "";
 		if (mbind->mode != 0)
 			mode = "c";
+		snprintf(repeat, sizeof repeat, "%u", mbind->repeat);
 		cmdstr = mode_key_tostring(mtab->cmdstr, mbind->cmd);
 		if (cmdstr != NULL) {
-			cmdq_print(cmdq, "bind-key -%st %s%s %*s %s%s%s%s",
+			cmdq_print(cmdq,
+			    "bind-key -%st %s%s%s%*s %*s %s%s%s%s",
 			    mode, any_mode && *mode == '\0' ? " " : "",
-			    mtab->name, (int) width, key, cmdstr,
+			    mtab->name,
+			    mbind->repeat != 1 ? " -R " :
+			    (repeatwidth == 0 ? "" : "    "),
+			    repeatwidth, mbind->repeat != 1 ? repeat : "",
+			    (int)keywidth, key, cmdstr,
 			    mbind->arg != NULL ? " \"" : "",
 			    mbind->arg != NULL ? mbind->arg : "",
 			    mbind->arg != NULL ? "\"": "");
@@ -173,21 +193,44 @@ cmd_list_keys_table(struct cmd *self, struct cmd_q *cmdq)
 	return (CMD_RETURN_NORMAL);
 }
 
-enum cmd_retval
-cmd_list_keys_commands(unused struct cmd *self, struct cmd_q *cmdq)
+static enum cmd_retval
+cmd_list_keys_commands(struct cmd *self, struct cmd_q *cmdq)
 {
+	struct args		*args = self->args;
 	const struct cmd_entry	**entryp;
 	const struct cmd_entry	 *entry;
+	struct format_tree	 *ft;
+	const char		 *template;
+	char			 *line;
+
+	if ((template = args_get(args, 'F')) == NULL) {
+		template = "#{command_list_name}"
+		    "#{?command_list_alias, (#{command_list_alias}),} "
+		    "#{command_list_usage}";
+	}
+
+	ft = format_create(cmdq, 0);
+	format_defaults(ft, NULL, NULL, NULL, NULL);
 
 	for (entryp = cmd_table; *entryp != NULL; entryp++) {
 		entry = *entryp;
-		if (entry->alias == NULL) {
-			cmdq_print(cmdq, "%s %s", entry->name, entry->usage);
-			continue;
+
+		format_add(ft, "command_list_name", "%s", entry->name);
+		if (entry->alias != NULL) {
+			format_add(ft, "command_list_alias", "%s",
+			    entry->alias);
 		}
-		cmdq_print(cmdq, "%s (%s) %s", entry->name, entry->alias,
-		    entry->usage);
+		if (entry->alias != NULL) {
+			format_add(ft, "command_list_usage", "%s",
+			    entry->usage);
+		}
+
+		line = format_expand(ft, template);
+		if (*line != '\0')
+			cmdq_print(cmdq, "%s", line);
+		free(line);
 	}
 
+	format_free(ft);
 	return (CMD_RETURN_NORMAL);
 }

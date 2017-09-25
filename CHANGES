@@ -1,3 +1,141 @@
+CHANGES FROM 2.2 to 2.3 29 September 2016
+
+Incompatible Changes
+====================
+
+None.
+
+Normal Changes
+==============
+
+* New option 'pane-border-status' to add text in the oane borders.
+* Support for hooks on commands: 'after' and 'before' hooks.
+* 'source-file' understands '-q' to supress errors for nonexistent files.
+* Lots of UTF8 improvements, especially on MacOS.
+* 'window-status-separator' understands #[] expansions.
+* 'split-window' understands '-f' for performing a full-width split.
+* Allow report count to be specified when using 'bind-key -R'.
+* 'set -a' for appending to user options (@foo) is now supported.
+* 'display-panes' can now accept a command to run, rather than always
+  selecting the pane.
+
+CHANGES FROM 2.1 to 2.2 10 April 2016
+
+Incompatible Changes
+====================
+
+* The format strings which referenced time have been removed.  Instead:
+
+  #{t:window_activity}
+
+can be used.
+
+* Support for TMPDIR has been removed.  Use TMUX_TMPDIR instead.
+* UTF8 detection how happens automatically if the client supports it, hence
+  the:
+
+  mouse-utf8
+  utf8
+
+  options has been removed.
+* The:
+
+  mouse_utf8_flag
+
+  format string has been removed.
+* The -I option to show-messages has been removed.  See:
+
+  #{t:start_time}
+
+  format option instead.
+
+Normal Changes
+==============
+
+* Panes are unzoomed with selectp -LRUD
+* New formats added:
+
+  #{scroll_position}
+  #{socket_path}
+  #{=10:...} -- limit to N characters (from the start)
+  #{=-10:...} -- limit to N characters (from the end)
+  #{t:...} -- used to format time-based formats
+  #{b:...} -- used to ascertain basename from string
+  #{d:...} -- used to ascertain dirname from string
+  #{s:...} -- used to perform substitutions on a string
+
+* Job output is run via the format system, so formats work again
+* If display-time is set to 0, then the indicators wait for a key to be
+  pressed.
+* list-keys and list-commands can be run without starting the tmux server.
+* kill-session learns -C to clear all alerts in all windows of the session.
+* Support for hooks (internal for now), but hooks for the following have been
+  implemented:
+
+  alert-bell
+  alert-silence
+  alert-activity
+  client-attached
+  client-detached
+  client-resized
+  pane-died
+  pane-exited
+
+* RGB (24bit) colour support.  The 'Tc' flag must be set in the external TERM
+  entry (using terminal-overrides or a custom terminfo entry).
+
+
+CHANGES FROM 2.0 to 2.1 18 October 2015
+
+Incompatible Changes
+====================
+
+* Mouse-mode has been rewritten.  There's now no longer options for:
+	- mouse-resize-pane
+	- mouse-select-pane
+	- mouse-select-window
+	- mode-mouse
+
+  Instead there is just one option:  'mouse' which turns on mouse support
+  entirely.
+* 'default-terminal' is now a session option.  Furthermore, if this is set
+  to 'screen-*' then emulate what screen does.  If italics are wanted, this
+  can be set to 'tmux' but this is still new and not necessarily supported
+  on all platforms with older ncurses installs.
+* The c0-* options for rate-limiting have been removed.  Instead, a backoff
+  approach is used.
+
+Normal Changes
+==============
+
+* New formats:
+	- session_activity
+	- window_linked
+	- window_activity_format
+	- session_alerts
+	- session_last_attached
+	- client_pid
+	- pid
+* 'copy-selection', 'append-selection', 'start-named-buffer' now understand
+  an '-x' flag to prevent it exiting copying mode.
+* 'select-pane' now understands '-P' to set window/pane background colours.
+* 'renumber-windows' now understands windows which are unlinked.
+* 'bind' now understands multiple key tables.  Allows for key-chaining.
+* 'select-layout' understands '-o' to undo the last layout change.
+* The environment is updated when switching sessions as well as attaching.
+* 'select-pane' now understands '-M' for marking a pane.  This marked pane
+  can then be used with commands which understand src-pane specifiers
+  automatically.
+* If a session/window target is prefixed with '=' then only an exact match
+  is considered.
+* 'move-window' understands '-a'.
+* 'update-environment' understands '-E' when attach-session is used on an
+  already attached client.
+* 'show-environment' understands '-s' to output Bourne-compatible commands.
+* New option: 'history-file' to save/restore command prompt history.
+* Copy mode is exited if the history is cleared whilst in copy-mode.
+* 'copy-mode' learned '-e' to exit copy-mode when scrolling to end.
+
 CHANGES FROM 1.9a to 2.0 6 March 2015
 
 Incompatible Changes
@@ -100,8 +238,8 @@ Normal Changes
 * A new environment variable TMUX_TMPDIR is now honoured, allowing the
   socket directory to be set outside of TMPDIR (/tmp/ if not set).
 * If -s not given to swap-pane the current pane is assumed.
-* A #{pane_syncronized} format specifier has been added to be a conditional
-  format if a pane is in a syncronised mode (c.f. syncronize-panes)
+* A #{pane_synchronized} format specifier has been added to be a conditional
+  format if a pane is in a synchronised mode (c.f. synchronize-panes)
 * Tmux now runs under Cygwin natively.
 * Formats can now be nested within each other and expanded accordingly.
 * Added 'automatic-rename-format' option to allow the automatic rename
@@ -901,7 +1039,7 @@ The list of older changes is below.
 * -u flag to scroll-mode and copy-mode to start scrolled one page
   up. scroll-mode -u is bound to prefix,page-up (ppage) by default.
 * Allow status, mode and message attributes to be changed by three new options:
-  status-attr, mode-attr, message-attr. A comma-separataed list is accepted
+  status-attr, mode-attr, message-attr. A comma-separated list is accepted
   containing: bright, dim, underscore, blink, reverse, hidden, italics, for
   example:
 

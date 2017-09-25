@@ -1,7 +1,7 @@
 /* $OpenBSD$ */
 
 /*
- * Copyright (c) 2007 Nicholas Marriott <nicm@users.sourceforge.net>
+ * Copyright (c) 2007 Nicholas Marriott <nicholas.marriott@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -29,14 +29,19 @@
 
 enum cmd_retval	 cmd_bind_key_exec(struct cmd *, struct cmd_q *);
 
-enum cmd_retval	 cmd_bind_key_mode_table(struct cmd *, struct cmd_q *, int);
+enum cmd_retval	 cmd_bind_key_mode_table(struct cmd *, struct cmd_q *,
+		     key_code);
 
 const struct cmd_entry cmd_bind_key_entry = {
-	"bind-key", "bind",
-	"cnrt:T:", 1, -1,
-	"[-cnr] [-t mode-table] [-T key-table] key command [arguments]",
-	0,
-	cmd_bind_key_exec
+	.name = "bind-key",
+	.alias = "bind",
+
+	.args = { "cnrR:t:T:", 1, -1 },
+	.usage = "[-cnr] [-t mode-table] [-R repeat-count] [-T key-table] key "
+	         "command [arguments]",
+
+	.flags = 0,
+	.exec = cmd_bind_key_exec
 };
 
 enum cmd_retval
@@ -45,7 +50,7 @@ cmd_bind_key_exec(struct cmd *self, struct cmd_q *cmdq)
 	struct args	*args = self->args;
 	char		*cause;
 	struct cmd_list	*cmdlist;
-	int		 key;
+	key_code	 key;
 	const char	*tablename;
 
 	if (args_has(args, 't')) {
@@ -61,7 +66,7 @@ cmd_bind_key_exec(struct cmd *self, struct cmd_q *cmdq)
 	}
 
 	key = key_string_lookup_string(args->argv[0]);
-	if (key == KEYC_NONE) {
+	if (key == KEYC_NONE || key == KEYC_UNKNOWN) {
 		cmdq_error(cmdq, "unknown key: %s", args->argv[0]);
 		return (CMD_RETURN_ERROR);
 	}
@@ -89,14 +94,15 @@ cmd_bind_key_exec(struct cmd *self, struct cmd_q *cmdq)
 }
 
 enum cmd_retval
-cmd_bind_key_mode_table(struct cmd *self, struct cmd_q *cmdq, int key)
+cmd_bind_key_mode_table(struct cmd *self, struct cmd_q *cmdq, key_code key)
 {
 	struct args			*args = self->args;
-	const char			*tablename;
+	const char			*tablename, *arg;
 	const struct mode_key_table	*mtab;
 	struct mode_key_binding		*mbind, mtmp;
 	enum mode_key_cmd		 cmd;
-	const char			*arg;
+	char				*cause;
+	u_int				 repeat;
 
 	tablename = args_get(args, 't');
 	if ((mtab = mode_key_findtable(tablename)) == NULL) {
@@ -140,6 +146,16 @@ cmd_bind_key_mode_table(struct cmd *self, struct cmd_q *cmdq, int key)
 		break;
 	}
 
+	repeat = 1;
+	if (args_has(args, 'R')) {
+		repeat = args_strtonum(args, 'R', 1, SHRT_MAX, &cause);
+		if (cause != NULL) {
+			cmdq_error(cmdq, "repeat count %s", cause);
+			free(cause);
+			return (CMD_RETURN_ERROR);
+		}
+	}
+
 	mtmp.key = key;
 	mtmp.mode = !!args_has(args, 'c');
 	if ((mbind = RB_FIND(mode_key_tree, mtab->tree, &mtmp)) == NULL) {
@@ -148,6 +164,7 @@ cmd_bind_key_mode_table(struct cmd *self, struct cmd_q *cmdq, int key)
 		mbind->mode = mtmp.mode;
 		RB_INSERT(mode_key_tree, mtab->tree, mbind);
 	}
+	mbind->repeat = repeat;
 	mbind->cmd = cmd;
 	mbind->arg = arg != NULL ? xstrdup(arg) : NULL;
 	return (CMD_RETURN_NORMAL);

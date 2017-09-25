@@ -1,7 +1,7 @@
 /* $OpenBSD$ */
 
 /*
- * Copyright (c) 2009 Nicholas Marriott <nicm@users.sourceforge.net>
+ * Copyright (c) 2009 Nicholas Marriott <nicholas.marriott@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -29,7 +29,7 @@ void	name_time_callback(int, short, void *);
 int	name_time_expired(struct window *, struct timeval *);
 
 void
-name_time_callback(unused int fd, unused short events, void *arg)
+name_time_callback(__unused int fd, __unused short events, void *arg)
 {
 	struct window	*w = arg;
 
@@ -58,7 +58,7 @@ check_window_name(struct window *w)
 	if (w->active == NULL)
 		return;
 
-	if (!options_get_number(&w->options, "automatic-rename"))
+	if (!options_get_number(w->options, "automatic-rename"))
 		return;
 
 	if (~w->active->flags & PANE_CHANGED) {
@@ -73,12 +73,15 @@ check_window_name(struct window *w)
 		if (!event_initialized(&w->name_event))
 			evtimer_set(&w->name_event, name_time_callback, w);
 		if (!evtimer_pending(&w->name_event, NULL)) {
-			log_debug("@%u name timer queued (%d left)", w->id, left);
+			log_debug("@%u name timer queued (%d left)", w->id,
+			    left);
 			timerclear(&next);
 			next.tv_usec = left;
 			event_add(&w->name_event, &next);
-		} else
-			log_debug("@%u name timer already queued (%d left)", w->id, left);
+		} else {
+			log_debug("@%u name timer already queued (%d left)",
+			    w->id, left);
+		}
 		return;
 	}
 	memcpy(&w->name_time, &tv, sizeof w->name_time);
@@ -118,11 +121,11 @@ format_window_name(struct window *w)
 	struct format_tree	*ft;
 	char			*fmt, *name;
 
-	ft = format_create();
+	ft = format_create(NULL, 0);
 	format_defaults_window(ft, w);
 	format_defaults_pane(ft, w->active);
 
-	fmt = options_get_string(&w->options, "automatic-rename-format");
+	fmt = options_get_string(w->options, "automatic-rename-format");
 	name = format_expand(ft, fmt);
 
 	format_free(ft);
