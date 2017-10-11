@@ -3,6 +3,8 @@ Note on tmux-sixel
 This fork has been created to make it a little easier to keep the sixel support
 patch provided by Hayaki Saito working (see https://github.com/saitoha).
 
+Add to your tmux.conf: set -ga terminal-overrides ',xterm*:smglr=\E7\E[?69h\E[%i%p1%d;%p2%ds\E8:mgc=\E7\E[?69l\E8'
+
 -----------
 
 Welcome to tmux!
